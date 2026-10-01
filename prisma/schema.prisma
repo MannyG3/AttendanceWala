@@ -1,0 +1,259 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  HOD
+  FACULTY
+  STUDENT
+}
+
+enum SubjectType {
+  THEORY
+  PRACTICAL
+}
+
+enum SessionStatus {
+  SCHEDULED
+  HELD
+  CANCELLED
+  SUBSTITUTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  OD
+  LEAVE
+}
+
+enum CalendarEventType {
+  REGULAR
+  HOLIDAY
+  EXAM_WEEK
+}
+
+enum RequestType {
+  LEAVE
+  OD
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String
+  name          String
+  role          Role     @default(FACULTY)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  faculty        Faculty?
+  student        Student?
+  markedSessions Session[]      @relation("MarkedBy")
+  approvedLeaves LeaveRequest[] @relation("ApprovedBy")
+  auditLogs      AuditLog[]
+}
+
+model Division {
+  id           String   @id @default(cuid())
+  name         String   @unique // e.g. TYAIML-A
+  department   String   // e.g. Artificial Intelligence & Machine Learning
+  academicYear String   @default("2026-2027")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  batches        Batch[]
+  students       Student[]
+  subjects       Subject[]
+  timetableSlots TimetableSlot[]
+}
+
+model Batch {
+  id         String   @id @default(cuid())
+  name       String   // e.g. A1, A2
+  divisionId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  division       Division        @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  students       Student[]
+  timetableSlots TimetableSlot[]
+
+  @@unique([name, divisionId])
+}
+
+model Student {
+  id         String   @id @default(cuid())
+  rollNo     Int      @unique // e.g. 31001
+  name       String
+  divisionId String
+  batchId    String
+  userId     String?  @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  division          Division           @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  batch             Batch              @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  user              User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  attendanceRecords AttendanceRecord[]
+  leaveRequests     LeaveRequest[]
+
+  @@index([divisionId])
+  @@index([batchId])
+}
+
+model Faculty {
+  id         String   @id @default(cuid())
+  employeeId String   @unique // e.g. FAC001
+  name       String
+  department String
+  userId     String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timetableSlots      TimetableSlot[]
+  substitutedSessions Session[]       @relation("SubstituteFaculty")
+}
+
+model Subject {
+  id         String      @id @default(cuid())
+  code       String      @unique // e.g. 22616
+  name       String      // e.g. Programming with Python
+  type       SubjectType @default(THEORY)
+  divisionId String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  division       Division        @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  timetableSlots TimetableSlot[]
+}
+
+model TimetableSlot {
+  id         String   @id @default(cuid())
+  divisionId String
+  batchId    String?  // NULL for Theory, specific Batch for Practical
+  subjectId  String
+  facultyId  String
+  weekday    Int      // 1 = Mon, 2 = Tue, ..., 6 = Sat
+  periodNo   Int      // 1, 2, 3, 4, 5, 6, 7, 8
+  startTime  String   // e.g. "09:00"
+  endTime    String   // e.g. "10:00"
+  room       String   // e.g. "LH-101" or "Lab-2"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  division Division  @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  batch    Batch?    @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  subject  Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  faculty  Faculty   @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  sessions Session[]
+
+  @@index([divisionId])
+  @@index([weekday])
+}
+
+model Session {
+  id                  String        @id @default(cuid())
+  timetableSlotId     String
+  date                DateTime      // Date component (YYYY-MM-DD)
+  status              SessionStatus @default(SCHEDULED)
+  substituteFacultyId String?
+  markedById          String?
+  markedAt            DateTime?
+  isUnlocked          Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  timetableSlot     TimetableSlot      @relation(fields: [timetableSlotId], references: [id], onDelete: Cascade)
+  substituteFaculty Faculty?           @relation("SubstituteFaculty", fields: [substituteFacultyId], references: [id], onDelete: SetNull)
+  markedBy          User?              @relation("MarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+  attendanceRecords AttendanceRecord[]
+  auditLogs         AuditLog[]
+
+  @@unique([timetableSlotId, date])
+  @@index([date])
+  @@index([timetableSlotId])
+}
+
+model AttendanceRecord {
+  id        String           @id @default(cuid())
+  sessionId String
+  studentId String
+  status    AttendanceStatus @default(PRESENT)
+  remark    String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId])
+  @@index([studentId])
+}
+
+model AcademicCalendar {
+  id          String            @id @default(cuid())
+  date        DateTime          @unique
+  type        CalendarEventType @default(HOLIDAY)
+  description String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model LeaveRequest {
+  id           String        @id @default(cuid())
+  studentId    String
+  startDate    DateTime
+  endDate      DateTime
+  type         RequestType   @default(LEAVE)
+  reason       String
+  status       RequestStatus @default(PENDING)
+  approvedById String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  student    Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  approvedBy User?   @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([studentId])
+}
+
+model AuditLog {
+  id                 String   @id @default(cuid())
+  sessionId          String
+  attendanceRecordId String?
+  changedById        String
+  oldStatus          String
+  newStatus          String
+  reason             String?
+  timestamp          DateTime @default(now())
+
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  changedBy User    @relation(fields: [changedById], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model SystemSettings {
+  id                         String   @id @default("default")
+  lateWeight                 Float    @default(1.0)
+  odWeight                   Float    @default(1.0)
+  presentDayThresholdPercent Float    @default(50.0)
+  editingLockHours           Int      @default(24)
+  updatedAt                  DateTime @updatedAt
+}
