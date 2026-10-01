@@ -1,64 +1,20 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 generator client {
   provider = "prisma-client-js"
 }
 
-enum Role {
-  ADMIN
-  HOD
-  FACULTY
-  STUDENT
-}
-
-enum SubjectType {
-  THEORY
-  PRACTICAL
-}
-
-enum SessionStatus {
-  SCHEDULED
-  HELD
-  CANCELLED
-  SUBSTITUTED
-}
-
-enum AttendanceStatus {
-  PRESENT
-  ABSENT
-  LATE
-  OD
-  LEAVE
-}
-
-enum CalendarEventType {
-  REGULAR
-  HOLIDAY
-  EXAM_WEEK
-}
-
-enum RequestType {
-  LEAVE
-  OD
-}
-
-enum RequestStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  password      String
-  name          String
-  role          Role     @default(FACULTY)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("FACULTY") // ADMIN, HOD, FACULTY, STUDENT
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   faculty        Faculty?
   student        Student?
@@ -130,13 +86,13 @@ model Faculty {
 }
 
 model Subject {
-  id         String      @id @default(cuid())
-  code       String      @unique // e.g. 22616
-  name       String      // e.g. Programming with Python
-  type       SubjectType @default(THEORY)
+  id         String   @id @default(cuid())
+  code       String   @unique // e.g. 22616
+  name       String   // e.g. Programming with Python
+  type       String   @default("THEORY") // THEORY, PRACTICAL
   divisionId String
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   division       Division        @relation(fields: [divisionId], references: [id], onDelete: Cascade)
   timetableSlots TimetableSlot[]
@@ -167,16 +123,16 @@ model TimetableSlot {
 }
 
 model Session {
-  id                  String        @id @default(cuid())
+  id                  String    @id @default(cuid())
   timetableSlotId     String
-  date                DateTime      // Date component (YYYY-MM-DD)
-  status              SessionStatus @default(SCHEDULED)
+  date                DateTime  // Date component (YYYY-MM-DD)
+  status              String    @default("SCHEDULED") // SCHEDULED, HELD, CANCELLED, SUBSTITUTED
   substituteFacultyId String?
   markedById          String?
   markedAt            DateTime?
-  isUnlocked          Boolean       @default(false)
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  isUnlocked          Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   timetableSlot     TimetableSlot      @relation(fields: [timetableSlotId], references: [id], onDelete: Cascade)
   substituteFaculty Faculty?           @relation("SubstituteFaculty", fields: [substituteFacultyId], references: [id], onDelete: SetNull)
@@ -190,13 +146,13 @@ model Session {
 }
 
 model AttendanceRecord {
-  id        String           @id @default(cuid())
+  id        String   @id @default(cuid())
   sessionId String
   studentId String
-  status    AttendanceStatus @default(PRESENT)
+  status    String   @default("PRESENT") // PRESENT, ABSENT, LATE, OD, LEAVE
   remark    String?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -207,25 +163,25 @@ model AttendanceRecord {
 }
 
 model AcademicCalendar {
-  id          String            @id @default(cuid())
-  date        DateTime          @unique
-  type        CalendarEventType @default(HOLIDAY)
+  id          String   @id @default(cuid())
+  date        DateTime @unique
+  type        String   @default("HOLIDAY") // REGULAR, HOLIDAY, EXAM_WEEK
   description String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model LeaveRequest {
-  id           String        @id @default(cuid())
+  id           String   @id @default(cuid())
   studentId    String
   startDate    DateTime
   endDate      DateTime
-  type         RequestType   @default(LEAVE)
+  type         String   @default("LEAVE") // LEAVE, OD
   reason       String
-  status       RequestStatus @default(PENDING)
+  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
   approvedById String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   student    Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   approvedBy User?   @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
